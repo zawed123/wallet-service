@@ -27,135 +27,196 @@ public class WalletServiceImpl implements WalletService {
 
     private final UserRepository userRepository;
     private final WalletRepository walletRepository;
-
     private final TransactionRepository transactionRepository;
 
-    public WalletServiceImpl(UserRepository userRepository, WalletRepository walletRepository,TransactionRepository transactionRepository) {
+    public WalletServiceImpl(UserRepository userRepository,
+                             WalletRepository walletRepository,
+                             TransactionRepository transactionRepository) {
         this.userRepository = userRepository;
         this.walletRepository = walletRepository;
-        this.transactionRepository=transactionRepository;
+        this.transactionRepository = transactionRepository;
     }
+
+    // ============================================================
+    // WALLET CREATION
+    // ============================================================
 
     @Override
     public Wallet createWalletForUser(UUID userId) {
-
-        User user = getUserOrThrow(userId);
-        validateUserHasNoWallet(userId);
+        User user = fetchUser(userId);
+        ensureWalletDoesNotExist(userId);
 
         Wallet wallet = new Wallet();
         wallet.setUser(user);
         wallet.setBalance(BigDecimal.ZERO);
-        return walletRepository.save(wallet); // Cascade persists wallet
+
+        return walletRepository.save(wallet);
     }
+
+    // ============================================================
+    // DEPOSIT
+    // ============================================================
 
     @Override
     @Transactional
     public Wallet deposit(UUID walletId, BigDecimal amount) {
-        Wallet wallet = findWalletOrThrow(walletId);
-        return updateBalance(wallet, amount, TransactionType.DEPOSIT, "Deposit",
-                LocalDateTime.now());
+        Wallet wallet = fetchWallet(walletId);
+
+        return applyTransaction(
+                wallet,
+                amount,
+                TransactionType.DEPOSIT,
+                "Amount credited",
+                LocalDateTime.now()
+        );
     }
+
+    // ============================================================
+    // WITHDRAW
+    // ============================================================
 
     @Override
     @Transactional
     public Wallet withdraw(UUID walletId, BigDecimal amount) {
-        Wallet wallet = findWalletOrThrow(walletId);
-        assertSufficientFunds(wallet, amount);
-        return updateBalance(wallet, amount.negate(), TransactionType.WITHDRAWAL, "Withdrawal",
-                LocalDateTime.now());
+        Wallet wallet = fetchWallet(walletId);
+
+        validateSufficientBalance(wallet, amount);
+
+        return applyTransaction(
+                wallet,
+                amount.negate(),
+                TransactionType.WITHDRAWAL,
+                "Amount debited",
+                LocalDateTime.now()
+        );
     }
+
+    // ============================================================
+    // BALANCE
+    // ============================================================
 
     @Override
     @Transactional(readOnly = true)
     public BalanceResponse getBalance(UUID walletId) {
-        // Read-only transaction — no save() calls must happen here.
-        // Returns only the wallet ID and balance, not the full entity,
-        // so callers do not receive more data than they need.
-        Wallet wallet = findWalletOrThrow(walletId);
+        Wallet wallet = fetchWallet(walletId);
         return new BalanceResponse(wallet.getId(), wallet.getBalance());
     }
+
+    // ============================================================
+    // TRANSFER
+    // ============================================================
 
     @Override
     @Transactional
     public TransferResponse transfer(TransferRequest request) {
-        UUID fromId       = request.getFromWalletId();
-        UUID toId         = request.getToWalletId();
+
+        UUID sourceId = request.getFromWalletId();
+        UUID targetId = request.getToWalletId();
         BigDecimal amount = request.getAmount();
 
-        assertNotSameWallet(fromId, toId);
+        validateDifferentWallets(sourceId, targetId);
 
-        Wallet fromWallet = findWalletOrThrow(fromId);
-        Wallet toWallet   = findWalletOrThrow(toId);
+        Wallet sourceWallet = fetchWallet(sourceId);
+        Wallet targetWallet = fetchWallet(targetId);
 
-        assertSufficientFunds(fromWallet, amount);
+        validateSufficientBalance(sourceWallet, amount);
 
         LocalDateTime now = LocalDateTime.now();
 
-        fromWallet = updateBalance(fromWallet, amount.negate(),
-                TransactionType.TRANSFER_OUT, "Transfer to wallet " + toId, now);
+        sourceWallet = applyTransaction(
+                sourceWallet,
+                amount.negate(),
+                TransactionType.TRANSFER_OUT,
+                "Transfer to wallet",
+                now
+        );
 
-        toWallet = updateBalance(toWallet, amount,
-                TransactionType.TRANSFER_IN, "Transfer from wallet " + fromId, now);
+        targetWallet = applyTransaction(
+                targetWallet,
+                amount,
+                TransactionType.TRANSFER_IN,
+                "Transfer from wallet",
+                now
+        );
 
         return new TransferResponse(
-                fromWallet.getId(), toWallet.getId(),
+                sourceWallet.getId(),
+                targetWallet.getId(),
                 amount,
-                fromWallet.getBalance(), toWallet.getBalance(),
-                now);
+                sourceWallet.getBalance(),
+                targetWallet.getBalance(),
+                now
+        );
     }
 
-    private void assertSufficientFunds(Wallet wallet, BigDecimal amount) {
+    // ============================================================
+    // VALIDATIONS
+    // ============================================================
+
+    private void validateSufficientBalance(Wallet wallet, BigDecimal amount) {
         if (wallet.getBalance().compareTo(amount) < 0) {
             throw new InsufficientFundsException(
-                    "Insufficient funds: balance is " + wallet.getBalance()
-                            + ", requested " + amount);
+                    "Insufficient balance to complete the transaction"
+            );
         }
     }
 
-    private void assertNotSameWallet(UUID fromId, UUID toId) {
-        if (fromId.equals(toId)) {
+    private void validateDifferentWallets(UUID sourceId, UUID targetId) {
+        if (sourceId.equals(targetId)) {
             throw new IllegalArgumentException(
-                    "Cannot transfer to the same wallet: " + fromId);
+                    "Source and destination wallets must be different"
+            );
         }
     }
 
+    private void ensureWalletDoesNotExist(UUID userId) {
+        if (walletRepository.existsByUserId(userId)) {
+            throw new WalletAlreadyExistsException(
+                    "A wallet is already associated with this user"
+            );
+        }
+    }
 
-    private Wallet updateBalance(Wallet wallet, BigDecimal delta,
-                                 TransactionType type, String description,
-                                 LocalDateTime timestamp) {
+    // ============================================================
+    // FETCH HELPERS
+    // ============================================================
+
+    private User fetchUser(UUID userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("User not found")
+                );
+    }
+
+    private Wallet fetchWallet(UUID walletId) {
+        return walletRepository.findById(walletId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Wallet not found")
+                );
+    }
+
+    // ============================================================
+    // CORE TRANSACTION LOGIC
+    // ============================================================
+
+    private Wallet applyTransaction(Wallet wallet,
+                                    BigDecimal delta,
+                                    TransactionType type,
+                                    String description,
+                                    LocalDateTime timestamp) {
+
         wallet.setBalance(wallet.getBalance().add(delta));
         wallet = walletRepository.save(wallet);
-        transactionRepository.save(
-                buildTransaction(wallet, delta.abs(), type, description, timestamp));
+
+        Transaction transaction = new Transaction();
+        transaction.setWallet(wallet);
+        transaction.setAmount(delta.abs());
+        transaction.setType(type);
+        transaction.setDescription(description);
+        transaction.setTimestamp(timestamp);
+
+        transactionRepository.save(transaction);
+
         return wallet;
-    }
-
-    private User getUserOrThrow(UUID userId) {
-        return userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
-    }
-
-    private void validateUserHasNoWallet(UUID userId) {
-        if (walletRepository.existsByUserId(userId)) {
-            throw new WalletAlreadyExistsException("Wallet already exists for user: " + userId);
-        }
-    }
-
-    private Wallet findWalletOrThrow(UUID walletId) {
-        return walletRepository.findById(walletId)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Wallet not found with id: " + walletId));
-    }
-
-    private Transaction buildTransaction(Wallet wallet, BigDecimal amount,
-                                         TransactionType type, String description,
-                                         LocalDateTime timestamp) {
-        Transaction tx = new Transaction();
-        tx.setWallet(wallet);
-        tx.setAmount(amount);
-        tx.setType(type);
-        tx.setDescription(description);
-        tx.setTimestamp(timestamp);
-        return tx;
     }
 }

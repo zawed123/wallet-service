@@ -17,7 +17,6 @@ public class ApiExceptionHandler {
         return build(HttpStatus.NOT_FOUND, ex.getMessage(), req.getRequestURI());
     }
 
-    // 409 — username or email already registered
     @ExceptionHandler(ResourceAlreadyExistsException.class)
     public ResponseEntity<ApiErrorResponse> handleConflict(
             ResourceAlreadyExistsException ex, HttpServletRequest req) {

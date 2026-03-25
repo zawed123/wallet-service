@@ -4,16 +4,18 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDateTime;
 
 /**
- * Uniform error response body returned by {@link ApiExceptionHandler}
- * for every non-2xx HTTP response produced by this service.
- *
- * Example JSON:
+ * Standard error response structure used across the application.
+ * This response is returned by {@code ApiExceptionHandler} whenever a request
+ * results in a non-success (non-2xx) HTTP status.
+ * It provides consistent details about the error, including status code,
+ * message, and request path, to help clients understand and debug failures.
+ * Sample response:
  * {
- *   "timestamp": "2024-01-28T14:32:00",
- *   "status":    409,
- *   "error":     "Conflict",
- *   "message":   "Username or email already exists",
- *   "path":      "/users"
+ *   "timestamp": "2026-03-25T14:32:00",
+ *   "status": 409,
+ *   "error": "Conflict",
+ *   "message": "Username or email already exists",
+ *   "path": "/users"
  * }
  */
 @Schema(description = "Standard error response envelope")

@@ -1,7 +1,6 @@
 package com.rs.payments.wallet.service.impl;
 
 import com.rs.payments.wallet.exception.ResourceAlreadyExistsException;
-import com.rs.payments.wallet.exception.ResourceNotFoundException;
 import com.rs.payments.wallet.model.User;
 import com.rs.payments.wallet.repository.UserRepository;
 import com.rs.payments.wallet.service.UserService;
@@ -18,12 +17,27 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public User createUser(User user) {
-        if (userRepository.existsByUsername(user.getUsername())) {
-            throw new ResourceAlreadyExistsException("Username already exists: " + user.getUsername());
-        }
-        if (userRepository.existsByEmail(user.getEmail())) {
-            throw new ResourceAlreadyExistsException("Email already exists: " + user.getEmail());
-        }
+
+        validateUniqueUser(user);
+
         return userRepository.save(user);
+    }
+
+    /**
+     * Validates that username and email are unique.
+     */
+    private void validateUniqueUser(User user) {
+
+        if (userRepository.existsByUsername(user.getUsername())) {
+            throw new ResourceAlreadyExistsException(
+                    "A user with the given username already exists"
+            );
+        }
+
+        if (userRepository.existsByEmail(user.getEmail())) {
+            throw new ResourceAlreadyExistsException(
+                    "A user with the given email already exists"
+            );
+        }
     }
 }

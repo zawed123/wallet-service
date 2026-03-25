@@ -44,14 +44,24 @@ public class WalletController {
     }
 
     @Operation(
-            summary = "Deposit funds into a wallet",
-            description = "Adds the specified amount to the wallet balance atomically "
-                    + "and records a DEPOSIT transaction. Amount must be greater than zero.",
+            summary = "Add money to wallet",
+            description = "Credits the given amount to the specified wallet and updates its balance within a single transaction. "
+                    + "A corresponding deposit entry is recorded for tracking purposes. "
+                    + "The amount must be a positive value.",
             responses = {
-                    @ApiResponse(responseCode = "200", description = "Deposit successful — returns the updated wallet",
-                            content = @Content(schema = @Schema(implementation = Wallet.class))),
-                    @ApiResponse(responseCode = "400", description = "Amount is null, zero, or negative"),
-                    @ApiResponse(responseCode = "404", description = "No wallet exists with the supplied walletId")
+                    @ApiResponse(
+                            responseCode = "200",
+                            description = "Amount successfully added and updated wallet details returned",
+                            content = @Content(schema = @Schema(implementation = Wallet.class))
+                    ),
+                    @ApiResponse(
+                            responseCode = "400",
+                            description = "Invalid amount — value must be greater than zero"
+                    ),
+                    @ApiResponse(
+                            responseCode = "404",
+                            description = "Wallet not found for the given walletId"
+                    )
             }
     )
     @PostMapping("/{walletId}/deposit")
@@ -64,16 +74,24 @@ public class WalletController {
 
 
     @Operation(
-            summary = "Withdraw funds from a wallet",
-            description = "Subtracts the specified amount from the wallet balance atomically "
-                    + "and records a WITHDRAWAL transaction. "
-                    + "The balance will never go negative — insufficient funds returns 400.",
+            summary = "Withdraw money from wallet",
+            description = "Debits the specified amount from the wallet and updates the balance within a single transaction. "
+                    + "A withdrawal entry is also created to maintain transaction history. "
+                    + "The operation ensures that the wallet balance does not drop below zero.",
             responses = {
-                    @ApiResponse(responseCode = "200", description = "Withdrawal successful — returns the updated wallet",
-                            content = @Content(schema = @Schema(implementation = Wallet.class))),
-                    @ApiResponse(responseCode = "400",
-                            description = "Amount is null, zero, negative, or exceeds the available balance"),
-                    @ApiResponse(responseCode = "404", description = "No wallet exists with the supplied walletId")
+                    @ApiResponse(
+                            responseCode = "200",
+                            description = "Withdrawal processed successfully with updated wallet details",
+                            content = @Content(schema = @Schema(implementation = Wallet.class))
+                    ),
+                    @ApiResponse(
+                            responseCode = "400",
+                            description = "Invalid request — amount must be positive and within the available balance"
+                    ),
+                    @ApiResponse(
+                            responseCode = "404",
+                            description = "Wallet not found for the provided walletId"
+                    )
             }
     )
     @PostMapping("/{walletId}/withdraw")

@@ -16,10 +16,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Handles peer-to-peer fund transfers between wallets.
- * Separated from WalletController because transfers are a distinct
- * resource concept (they involve two wallets, not one) and deserve
- * their own URL namespace: POST /transfers.
+ * Controller that manages peer-to-peer wallet transfer operations.
+ * Transfers are treated as a separate resource since they involve interaction
+ * between two wallets (debit and credit), making them conceptually different
+ * from single-wallet operations.
+ * This design ensures better separation of concerns and aligns with RESTful principles
+ * by exposing transfers via a dedicated endpoint: POST /transfers.
  */
 @RestController
 @RequestMapping("/transfers")
@@ -33,24 +35,26 @@ public class TransferController {
     }
 
     @Operation(
-            summary = "Transfer funds between two wallets",
-            description = "Atomically moves the specified amount from the source wallet to the "
-                    + "destination wallet. "
-                    + "Records a TRANSFER_OUT transaction on the source and a TRANSFER_IN on the "
-                    + "destination. "
-                    + "If anything fails the entire operation rolls back — no partial state is persisted.",
+            summary = "Perform wallet transfer",
+            description = "Transfers a specified amount from one wallet to another within a single transaction. "
+                    + "The source wallet is debited and the destination wallet is credited accordingly. "
+                    + "Transaction entries are created for both sides (debit and credit) to maintain history. "
+                    + "In case of any failure during processing, the entire operation is rolled back to avoid partial updates.",
             responses = {
                     @ApiResponse(
                             responseCode = "200",
-                            description = "Transfer successful — returns both updated balances",
-                            content = @Content(schema = @Schema(implementation = TransferResponse.class))),
+                            description = "Transfer completed successfully with updated wallet balances",
+                            content = @Content(schema = @Schema(implementation = TransferResponse.class))
+                    ),
                     @ApiResponse(
                             responseCode = "400",
-                            description = "Amount is invalid, source balance is insufficient, "
-                                    + "or fromWalletId equals toWalletId"),
+                            description = "Invalid transfer request — could be due to insufficient funds, "
+                                    + "invalid amount, or transferring within the same wallet"
+                    ),
                     @ApiResponse(
                             responseCode = "404",
-                            description = "Source or destination wallet does not exist")
+                            description = "Either the source or destination wallet was not found"
+                    )
             }
     )
     @PostMapping
