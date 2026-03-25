@@ -174,7 +174,20 @@ class BalanceInquiryIntegrationTest extends BaseIntegrationTest {
         assertThat(response.getBody().getWalletId()).isEqualTo(wallet.getId());
     }
 
+    // =========================================================================
+    // Not found — 404
+    // =========================================================================
 
+    @Test
+    @DisplayName("GET /wallets/{id}/balance - 404 when wallet does not exist")
+    void shouldReturn404WhenWalletDoesNotExist() {
+        // Act & Assert
+        assertThatThrownBy(() -> restTemplate.getForEntity(
+                balanceUrl(UUID.randomUUID()), BalanceResponse.class))
+                .isInstanceOf(HttpClientErrorException.class)
+                .satisfies(ex -> assertThat(((HttpClientErrorException) ex).getStatusCode())
+                        .isEqualTo(HttpStatus.NOT_FOUND));
+    }
     // =========================================================================
     // Helpers
     // =========================================================================
